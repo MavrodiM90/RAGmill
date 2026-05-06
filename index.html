@@ -1,0 +1,2655 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Universal MD Converter for RAG</title>
+<meta name="description" content="Универсальный локальный конвертер документов в Markdown для RAG. Notion, Obsidian, HTML, Jupyter — всё в один формат. Файлы не уходят на сервер.">
+<style>
+  :root {
+    --bg: #fcfcfa;
+    --bg-deep: #f5f4ee;
+    --surface: #ffffff;
+    --surface-alt: #f5f4ee;
+    --surface-hover: #ebe9e0;
+    --text-primary: #1a1a1a;
+    --text-secondary: #5f5e5a;
+    --text-tertiary: #8e8d87;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.18);
+    --accent: #185FA5;
+    --accent-hover: #0C447C;
+    --accent-bg: #E6F1FB;
+    --accent-text: #0C447C;
+    --success: #0F6E56;
+    --success-bg: #E1F5EE;
+    --warning: #854F0B;
+    --warning-bg: #FAEEDA;
+    --danger: #993556;
+    --danger-bg: #FBEAF0;
+    --diff-add-bg: #E1F5EE;
+    --diff-add-text: #085041;
+    --diff-del-bg: #FCEBEB;
+    --diff-del-text: #791F1F;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161616;
+      --bg-deep: #0e0e0e;
+      --surface: #1e1e1e;
+      --surface-alt: #262624;
+      --surface-hover: #2e2e2c;
+      --text-primary: #f5f5f0;
+      --text-secondary: #b4b2a9;
+      --text-tertiary: #7a7975;
+      --border: rgba(255,255,255,0.08);
+      --border-strong: rgba(255,255,255,0.18);
+      --accent: #85B7EB;
+      --accent-hover: #B5D4F4;
+      --accent-bg: #0C447C;
+      --accent-text: #B5D4F4;
+      --success: #5DCAA5;
+      --success-bg: #085041;
+      --warning: #FAC775;
+      --warning-bg: #633806;
+      --danger: #ED93B1;
+      --danger-bg: #72243E;
+      --diff-add-bg: #085041;
+      --diff-add-text: #9FE1CB;
+      --diff-del-bg: #791F1F;
+      --diff-del-text: #F7C1C1;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.55;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* === LAYOUT === */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 28px; height: 28px;
+    background: var(--text-primary);
+    color: var(--bg);
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 14px;
+    font-family: var(--font-mono);
+  }
+  .title-block h1 { font-size: 15px; font-weight: 600; margin: 0; line-height: 1.2; }
+  .title-block .tagline { font-size: 11px; color: var(--text-tertiary); margin: 0; }
+  .topbar-right { display: flex; gap: 6px; align-items: center; }
+
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px 24px 60px;
+  }
+  @media (max-width: 700px) {
+    .topbar { padding: 10px 14px; }
+    .container { padding: 14px 14px 40px; }
+  }
+
+  /* === HERO (показывается, когда поле пустое) === */
+  .hero {
+    text-align: center;
+    padding: 24px 16px 18px;
+  }
+  .hero h2 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .hero p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0 auto;
+    max-width: 580px;
+  }
+  .hero-features {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+  .hero-features span { display: inline-flex; align-items: center; gap: 4px; }
+  .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--success); display: inline-block; }
+
+  /* === MAIN GRID === */
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 16px;
+  }
+  @media (max-width: 900px) {
+    .workspace { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 520px;
+    box-shadow: var(--shadow-sm);
+  }
+  .panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 0.5px solid var(--border);
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: 48px;
+  }
+  .panel-title {
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+  /* === DETECT BADGE === */
+  .detect-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--surface-alt);
+    color: var(--text-secondary);
+    border: 0.5px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .detect-badge:hover { background: var(--surface-hover); }
+  .detect-badge.detected {
+    background: var(--accent-bg);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .detect-badge .dot { background: currentColor; opacity: 0.6; }
+
+  /* === BUTTONS === */
+  .btn {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 6px 12px;
+    transition: all 0.15s;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+  .btn:hover { background: var(--surface-alt); border-color: var(--border-strong); }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.icon-only { padding: 6px 8px; }
+  .btn.copied {
+    background: var(--success-bg);
+    color: var(--success);
+    border-color: var(--success);
+  }
+  .btn.primary {
+    background: var(--text-primary);
+    color: var(--bg);
+    border-color: var(--text-primary);
+  }
+  .btn.primary:hover { opacity: 0.88; background: var(--text-primary); }
+  .btn.accent {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .btn.accent:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn.ghost { background: transparent; border-color: transparent; }
+  .btn.ghost:hover { background: var(--surface-alt); }
+
+  /* === INPUT AREA === */
+  .input-wrapper {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    padding: 14px 16px;
+    resize: none;
+    outline: none;
+    width: 100%;
+    min-height: 380px;
+  }
+  textarea[readonly] { background: transparent; }
+  textarea.dropping {
+    background: var(--accent-bg);
+  }
+  .empty-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: 40px 20px;
+    transition: opacity 0.2s;
+  }
+  .empty-overlay.hidden { opacity: 0; }
+  .empty-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: var(--surface-alt);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    font-size: 22px;
+  }
+  .empty-overlay h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 4px;
+  }
+  .empty-overlay p {
+    font-size: 12px;
+    margin: 0;
+    line-height: 1.5;
+  }
+  .empty-overlay .empty-hint {
+    margin-top: 14px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    pointer-events: auto;
+  }
+  .empty-overlay .empty-hint a {
+    color: var(--accent);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .empty-overlay .empty-hint a:hover { text-decoration: underline; }
+
+  /* === STATS === */
+  .stats {
+    display: flex;
+    gap: 14px;
+    padding: 8px 14px;
+    border-top: 0.5px solid var(--border);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    flex-wrap: wrap;
+    background: var(--bg-deep);
+  }
+  .stat-item strong { color: var(--text-secondary); font-weight: 600; }
+
+  /* === MODE BAR === */
+  .mode-bar {
+    display: flex;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 4px;
+    gap: 2px;
+    box-shadow: var(--shadow-sm);
+  }
+  .mode-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 14px;
+    transition: all 0.15s;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .mode-btn:hover { color: var(--text-primary); background: var(--surface-alt); }
+  .mode-btn.active {
+    background: var(--text-primary);
+    color: var(--bg);
+  }
+
+  /* === CONFIG SECTION === */
+  .config-section {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-top: 14px;
+    overflow: hidden;
+  }
+  .config-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+  .config-row + .config-row { border-top: 0.5px solid var(--border); }
+  .config-row.collapse-btn {
+    cursor: pointer;
+    color: var(--text-secondary);
+    user-select: none;
+    transition: background 0.15s;
+    font-size: 12px;
+  }
+  .config-row.collapse-btn:hover { background: var(--surface-alt); }
+  .config-row.collapse-btn .chevron {
+    transition: transform 0.2s;
+    margin-left: auto;
+    font-size: 10px;
+  }
+  .config-row.collapse-btn.open .chevron { transform: rotate(180deg); }
+  .config-content { display: none; }
+  .config-content.open { display: block; }
+
+  .config-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 90px;
+    font-weight: 500;
+  }
+  .config-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .chip {
+    background: var(--surface-alt);
+    border: 0.5px solid var(--border);
+    border-radius: 100px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 4px 11px;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .chip:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .chip.active {
+    background: var(--accent-bg);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+
+  .checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 3px 0;
+  }
+  .checkbox-row:hover { color: var(--text-primary); }
+  .checkbox-row input { cursor: pointer; margin: 0; accent-color: var(--accent); }
+
+  select, input[type="number"] {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 5px 8px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  input[type="number"] { width: 80px; cursor: text; }
+  select:hover, input[type="number"]:hover { border-color: var(--border-strong); }
+  select:focus, input[type="number"]:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+
+  /* === VIEW TOGGLE === */
+  .view-toggle {
+    display: inline-flex;
+    background: var(--surface-alt);
+    border-radius: var(--radius-md);
+    padding: 2px;
+    gap: 2px;
+  }
+  .view-btn {
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    padding: 4px 10px;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .view-btn:hover { color: var(--text-primary); }
+  .view-btn.active {
+    background: var(--surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* === PREVIEW AREA === */
+  .preview-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.65;
+    min-height: 380px;
+  }
+  .preview-area pre {
+    background: var(--bg-deep);
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    margin: 8px 0;
+    border: 0.5px solid var(--border);
+  }
+  .preview-area code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--bg-deep);
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 0.5px solid var(--border);
+  }
+  .preview-area pre code { background: transparent; padding: 0; border: none; }
+  .preview-area h1 { font-size: 19px; font-weight: 600; margin: 16px 0 8px; line-height: 1.3; }
+  .preview-area h2 { font-size: 16px; font-weight: 600; margin: 14px 0 6px; line-height: 1.3; }
+  .preview-area h3 { font-size: 14px; font-weight: 600; margin: 12px 0 4px; line-height: 1.3; }
+  .preview-area p { margin: 6px 0; }
+  .preview-area ul, .preview-area ol { margin: 6px 0; padding-left: 22px; }
+  .preview-area li { margin: 2px 0; }
+  .preview-area blockquote {
+    border-left: 3px solid var(--border-strong);
+    padding-left: 10px;
+    color: var(--text-secondary);
+    margin: 8px 0;
+  }
+  .preview-area a { color: var(--accent); text-decoration: none; }
+  .preview-area a:hover { text-decoration: underline; }
+  .preview-area hr { border: none; border-top: 0.5px solid var(--border); margin: 14px 0; }
+
+  /* === CHUNKS LIST === */
+  .chunks-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: var(--bg-deep);
+  }
+  .chunk-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 11px 13px;
+    font-size: 12px;
+    transition: border-color 0.15s;
+  }
+  .chunk-card:hover { border-color: var(--border-strong); }
+  .chunk-card.warn { border-color: var(--warning); background: var(--warning-bg); }
+  .chunk-card.dup { border-color: var(--danger); background: var(--danger-bg); }
+  .chunk-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .chunk-id { font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary); }
+  .chunk-title { font-weight: 600; color: var(--text-primary); flex: 1; min-width: 0; word-break: break-word; }
+  .chunk-meta { font-size: 10px; color: var(--text-tertiary); white-space: nowrap; }
+  .chunk-path {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    font-family: var(--font-mono);
+    word-break: break-word;
+  }
+  .chunk-content {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 90px;
+    overflow: hidden;
+    position: relative;
+  }
+  .chunk-content.expanded { max-height: none; }
+  .chunk-content.collapsed::after {
+    content: "";
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 30px;
+    background: linear-gradient(transparent, var(--surface));
+    pointer-events: none;
+  }
+  .chunk-card.warn .chunk-content.collapsed::after { background: linear-gradient(transparent, var(--warning-bg)); }
+  .chunk-card.dup .chunk-content.collapsed::after { background: linear-gradient(transparent, var(--danger-bg)); }
+  .chunk-toggle {
+    font-size: 10px;
+    color: var(--accent);
+    cursor: pointer;
+    margin-top: 6px;
+    display: inline-block;
+    font-weight: 500;
+  }
+  .chunk-toggle:hover { text-decoration: underline; }
+  .chunk-flag {
+    display: inline-block;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    vertical-align: middle;
+  }
+  .flag-warn { background: var(--warning); color: var(--warning-bg); }
+  .flag-dup { background: var(--danger); color: var(--danger-bg); }
+
+  /* === DIFF === */
+  .diff-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.65;
+    background: var(--bg-deep);
+  }
+  .diff-line { padding: 1px 6px; border-radius: 3px; white-space: pre-wrap; word-break: break-word; }
+  .diff-add { background: var(--diff-add-bg); color: var(--diff-add-text); }
+  .diff-del { background: var(--diff-del-bg); color: var(--diff-del-text); text-decoration: line-through; opacity: 0.85; }
+  .diff-context { color: var(--text-tertiary); }
+  .diff-info { color: var(--text-tertiary); font-style: italic; padding: 4px 6px; }
+
+  /* === FILES LIST === */
+  .files-list {
+    padding: 8px 14px;
+    background: var(--accent-bg);
+    border-bottom: 0.5px solid var(--border);
+    max-height: 110px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+  .files-list-head {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--accent-text);
+    display: flex;
+    justify-content: space-between;
+  }
+  .files-list-clear {
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .files-list-clear:hover { text-decoration: underline; }
+  .file-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+    color: var(--accent-text);
+  }
+
+  /* === EMPTY STATES === */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    text-align: center;
+    padding: 40px 20px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .empty-state-icon {
+    font-size: 28px;
+    opacity: 0.4;
+  }
+
+  /* === TOAST === */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--text-primary);
+    color: var(--bg);
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    opacity: 0;
+    transition: all 0.25s;
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: var(--shadow-md);
+    font-weight: 500;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* === MODAL === */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    max-width: 720px;
+    width: 100%;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-md);
+  }
+  .modal-head {
+    padding: 14px 18px;
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .modal-body { padding: 14px 18px; overflow-y: auto; }
+  .modal-close {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 22px;
+    color: var(--text-secondary);
+    padding: 0 6px;
+    line-height: 1;
+  }
+  .modal-close:hover { color: var(--text-primary); }
+
+  .test-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 0.5px solid var(--border);
+    font-size: 13px;
+  }
+  .test-row:last-child { border-bottom: none; }
+  .test-pass { color: var(--success); font-weight: 500; }
+  .test-fail { color: var(--danger); font-weight: 500; }
+  .test-summary {
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+  }
+  .test-summary.all-pass { background: var(--success-bg); color: var(--success); }
+  .test-summary.has-fail { background: var(--danger-bg); color: var(--danger); }
+
+  .help-section { margin-bottom: 18px; }
+  .help-section h4 {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .help-section p {
+    margin: 0 0 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .help-section kbd {
+    background: var(--bg-deep);
+    border: 0.5px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .help-section code {
+    background: var(--bg-deep);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  /* === SOURCE PICKER (modal) === */
+  .source-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+  }
+  .source-item {
+    padding: 10px 12px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 13px;
+    background: var(--surface-alt);
+  }
+  .source-item:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+  .source-item.active { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent); }
+  .source-name { font-weight: 600; margin-bottom: 2px; }
+  .source-desc { font-size: 11px; color: var(--text-tertiary); line-height: 1.4; }
+  .source-item.active .source-desc { color: var(--accent-text); opacity: 0.85; }
+
+  /* === FOOTER === */
+  footer {
+    margin-top: 32px;
+    padding-top: 18px;
+    border-top: 0.5px solid var(--border);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: center;
+    line-height: 1.7;
+  }
+  footer a { color: var(--text-secondary); text-decoration: none; }
+  footer a:hover { color: var(--text-primary); }
+
+  /* Mobile === */
+  @media (max-width: 600px) {
+    .panel { min-height: 380px; }
+    textarea, .preview-area, .chunks-list, .diff-area { min-height: 280px; }
+    .hero h2 { font-size: 20px; }
+    .hero { padding: 12px 8px 12px; }
+    .config-row { padding: 10px 12px; }
+    .mode-btn { font-size: 12px; padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">M</div>
+    <div class="title-block">
+      <h1>Universal MD Converter</h1>
+      <p class="tagline">локальная обработка · 0 байт уходит на сервер</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="btn ghost" id="help-btn" title="Как пользоваться">Помощь</button>
+    <button class="btn ghost" id="run-tests-btn" title="Прогнать встроенные тесты">Тесты</button>
+    <button class="btn ghost" id="share-link-btn" title="Скопировать ссылку с настройками">Поделиться</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- HERO (для пустого состояния) -->
+  <div class="hero" id="hero">
+    <h2>Готовлю любой документ для RAG за секунды</h2>
+    <p>Notion · Obsidian · HTML · Jupyter · Confluence · обычный Markdown — всё приводится к единому формату, готовому для векторной базы.</p>
+    <div class="hero-features">
+      <span><span class="dot"></span>Auto-detect источника</span>
+      <span><span class="dot"></span>Чанкинг 4 стратегиями</span>
+      <span><span class="dot"></span>JSON, LangChain, CSV</span>
+      <span><span class="dot"></span>Без логов и серверов</span>
+    </div>
+  </div>
+
+  <!-- MODE BAR -->
+  <div class="mode-bar" role="tablist">
+    <button class="mode-btn active" data-mode="cleanup" role="tab">Очистить</button>
+    <button class="mode-btn" data-mode="chunks" role="tab">Разбить на чанки</button>
+    <button class="mode-btn" data-mode="plain" role="tab">Plain text</button>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div class="workspace">
+    <!-- INPUT PANEL -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <span>Вход</span>
+          <button class="detect-badge" id="detect-badge" title="Кликните, чтобы выбрать источник вручную">
+            <span>Источник:</span>
+            <span id="detect-name">не определён</span>
+          </button>
+        </div>
+        <div class="panel-actions">
+          <button class="btn ghost" id="sample-btn" title="Загрузить пример">Пример</button>
+          <button class="btn ghost" id="clear-input">Очистить</button>
+        </div>
+      </div>
+      <div id="files-list" class="files-list" style="display:none;"></div>
+      <div class="input-wrapper">
+        <textarea id="input" placeholder="Вставьте текст здесь..."></textarea>
+        <div class="empty-overlay" id="empty-overlay">
+          <div class="empty-icon">📄</div>
+          <h3>Перетащите файлы сюда</h3>
+          <p>или вставьте Markdown / HTML / JSON в это поле</p>
+          <div class="empty-hint">
+            <a id="hint-sample">Загрузить пример</a> ·
+            поддержка: .md .markdown .txt .html .ipynb
+          </div>
+        </div>
+      </div>
+      <div class="stats">
+        <span class="stat-item"><strong id="in-chars">0</strong> симв.</span>
+        <span class="stat-item"><strong id="in-lines">0</strong> строк</span>
+        <span class="stat-item">~<strong id="in-tokens">0</strong> токенов</span>
+      </div>
+    </div>
+
+    <!-- OUTPUT PANEL -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <span>Результат</span>
+          <span id="out-extra" style="font-size:11px; color:var(--text-tertiary); font-weight:400;"></span>
+        </div>
+        <div class="panel-actions">
+          <div class="view-toggle" id="view-toggle">
+            <button class="view-btn active" data-view="raw">Сырой</button>
+            <button class="view-btn" data-view="preview">Превью</button>
+            <button class="view-btn" data-view="diff">Diff</button>
+          </div>
+          <button class="btn" id="copy-btn">Копировать</button>
+          <button class="btn primary" id="download-btn">Скачать</button>
+        </div>
+      </div>
+      <textarea id="output-raw" readonly placeholder="Здесь появится результат после конвертации"></textarea>
+      <div class="preview-area" id="output-preview" style="display:none;"></div>
+      <div class="diff-area" id="output-diff" style="display:none;"></div>
+      <div class="chunks-list" id="output-chunks" style="display:none;"></div>
+      <div class="stats">
+        <span class="stat-item"><strong id="out-chars">0</strong> симв.</span>
+        <span class="stat-item"><strong id="out-lines">0</strong> строк</span>
+        <span class="stat-item">~<strong id="out-tokens">0</strong> токенов</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIG (collapsible) -->
+  <div class="config-section">
+    <div class="config-row collapse-btn" id="config-toggle">
+      <span>Расширенные настройки</span>
+      <span class="chevron">▼</span>
+    </div>
+
+    <div class="config-content" id="config-content">
+
+      <!-- Cleanup options -->
+      <div class="config-row" id="row-cleanup">
+        <span class="config-label">Очистка</span>
+        <div class="config-options">
+          <label class="checkbox-row"><input type="checkbox" id="opt-uuid" checked> UUID</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-html" checked> HTML-теги</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-empty" checked> Пустые строки</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-fix-links" checked> Чинить ссылки</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-frontmatter" checked> Frontmatter (YAML)</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-wikilinks" checked> Wiki-ссылки [[...]]</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-smartquotes" checked> Smart quotes</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-invisible" checked> Невидимые символы</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-images"> Удалять картинки</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-base64"> Удалять base64-картинки</label>
+        </div>
+      </div>
+
+      <!-- Chunks options -->
+      <div class="config-row" id="row-chunks" style="display:none;">
+        <span class="config-label">Стратегия</span>
+        <div class="config-options">
+          <button class="chip active" data-strategy="headings">По заголовкам</button>
+          <button class="chip" data-strategy="paragraphs">По абзацам</button>
+          <button class="chip" data-strategy="sliding">Скользящее окно</button>
+          <button class="chip" data-strategy="recursive">Рекурсивный</button>
+        </div>
+      </div>
+      <div class="config-row" id="row-chunks-2" style="display:none;">
+        <span class="config-label">Параметры</span>
+        <div class="config-options" style="align-items:center;">
+          <span id="ctrl-headings" style="display:flex; gap:6px; align-items:center;">
+            <span style="font-size:11px; color:var(--text-tertiary);">Уровень:</span>
+            <select id="chunk-level">
+              <option value="1">H1</option>
+              <option value="2" selected>H1 + H2</option>
+              <option value="3">H1 + H2 + H3</option>
+            </select>
+          </span>
+          <span style="display:flex; gap:6px; align-items:center;">
+            <span style="font-size:11px; color:var(--text-tertiary);">Макс. симв:</span>
+            <input type="number" id="chunk-max" value="2000" min="200" max="20000" step="100">
+          </span>
+          <span id="ctrl-overlap" style="display:none; gap:6px; align-items:center;">
+            <span style="font-size:11px; color:var(--text-tertiary);">Перекрытие:</span>
+            <input type="number" id="chunk-overlap" value="200" min="0" max="2000" step="50">
+          </span>
+          <span style="display:flex; gap:6px; align-items:center;">
+            <span style="font-size:11px; color:var(--text-tertiary);">Формат:</span>
+            <select id="chunk-format">
+              <option value="generic" selected>Generic JSON</option>
+              <option value="langchain">LangChain</option>
+              <option value="csv">CSV</option>
+            </select>
+          </span>
+          <label class="checkbox-row"><input type="checkbox" id="opt-clean-first" checked> Сначала очистить</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-dedup" checked> Помечать дубли</label>
+        </div>
+      </div>
+
+      <!-- Plain text options -->
+      <div class="config-row" id="row-plain" style="display:none;">
+        <span class="config-label">Plain text</span>
+        <div class="config-options">
+          <label class="checkbox-row"><input type="checkbox" id="opt-keep-headings" checked> Заголовки текстом</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-keep-lists"> Маркеры списков</label>
+          <label class="checkbox-row"><input type="checkbox" id="opt-keep-code" checked> Содержимое кода</label>
+        </div>
+      </div>
+
+      <!-- Presets -->
+      <div class="config-row">
+        <span class="config-label">Пресеты</span>
+        <div class="config-options">
+          <button class="chip active" data-preset="custom">Custom</button>
+          <button class="chip" data-preset="relevance">Relevance AI</button>
+          <button class="chip" data-preset="langchain">LangChain</button>
+          <button class="chip" data-preset="generic">Generic embeddings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Все файлы обрабатываются прямо в браузере — никуда не отправляются<br>
+    <a href="https://github.com/MavrodiM90" target="_blank" rel="noopener">github.com/MavrodiM90</a> ·
+    оценка токенов приблизительная (≈3.5 симв./токен для смешанного RU/EN)
+  </footer>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="tests-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Тесты регулярок</h3>
+      <button class="modal-close" data-close="tests-modal">×</button>
+    </div>
+    <div class="modal-body" id="tests-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="help-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Как пользоваться</h3>
+      <button class="modal-close" data-close="help-modal">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="help-section">
+        <h4>Auto-detect источника</h4>
+        <p>Скрипт сам определяет тип документа по характерным признакам: UUID-паттерны → Notion, frontmatter + <code>[[wiki]]</code> → Obsidian, тег <code>&lt;html&gt;</code> → HTML, поле <code>cells</code> → Jupyter. Кликните на бейдж «Источник» рядом с заголовком, чтобы переопределить вручную.</p>
+      </div>
+      <div class="help-section">
+        <h4>Три режима</h4>
+        <p><strong>Очистить</strong> — убирает мусор из исходника, сохраняя структуру MD.</p>
+        <p><strong>Разбить на чанки</strong> — нарезает документ на куски с метаданными для векторной БД. Стратегии: по заголовкам (с breadcrumbs), по абзацам, скользящее окно с перекрытием, рекурсивный сплиттер à la LangChain.</p>
+        <p><strong>Plain text</strong> — снимает всю разметку, оставляя чистый текст.</p>
+      </div>
+      <div class="help-section">
+        <h4>Просмотр результата</h4>
+        <p>Три view-режима справа: <strong>Сырой</strong> (исходный код), <strong>Превью</strong> (отрендеренный MD или карточки чанков), <strong>Diff</strong> (что именно изменилось).</p>
+      </div>
+      <div class="help-section">
+        <h4>Хоткеи</h4>
+        <p><kbd>Ctrl+Enter</kbd> — обработать заново · <kbd>Ctrl+S</kbd> — скачать результат · <kbd>Ctrl+Shift+C</kbd> — скопировать · все настройки сохраняются автоматически</p>
+      </div>
+      <div class="help-section">
+        <h4>Файлы</h4>
+        <p>Перетащите <code>.md</code>, <code>.markdown</code>, <code>.txt</code>, <code>.html</code>, <code>.ipynb</code> прямо на текстовое поле. При нескольких файлах они склеиваются с разделителями. Ничего не уходит на сервер — обработка в браузере.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="source-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Выбор источника</h3>
+      <button class="modal-close" data-close="source-modal">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;">
+        Auto-detect определяет тип сам, но можно переопределить вручную. Каждый источник применяет специфичные правила нормализации.
+      </p>
+      <div class="source-list" id="source-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+// ============================================================================
+// СОСТОЯНИЕ
+// ============================================================================
+const state = {
+  mode: "cleanup",
+  view: "raw",
+  source: "auto",       // выбранный пользователем источник
+  detectedSource: null, // что распознал auto-detect
+  loadedFiles: [],
+  lastResult: "",
+  lastChunks: null
+};
+
+const STORAGE_KEY = "universal-md-converter-v1";
+
+// ============================================================================
+// ИСТОЧНИКИ
+// ============================================================================
+const SOURCES = {
+  auto: { name: "Auto-detect", desc: "Определить автоматически" },
+  notion: { name: "Notion", desc: "UUID-хвосты, HTML-обёртки, плейсхолдеры" },
+  obsidian: { name: "Obsidian", desc: "Wiki-ссылки [[...]], frontmatter, теги" },
+  confluence: { name: "Confluence", desc: "Макросы, остаточный HTML" },
+  jupyter: { name: "Jupyter", desc: ".ipynb с MD- и code-ячейками" },
+  html: { name: "HTML", desc: "Веб-страницы, статьи, документация" },
+  gdocs: { name: "Google Docs", desc: "Smart quotes, кривые таблицы" },
+  plain: { name: "Plain Markdown", desc: "Обычный MD без специфики" }
+};
+
+// ============================================================================
+// УТИЛИТЫ
+// ============================================================================
+const $ = id => document.getElementById(id);
+const approxTokens = s => Math.round(s.length / 3.5);
+const countLines = s => s ? s.split(/\r?\n/).length : 0;
+const fmtNum = n => n.toLocaleString("ru-RU");
+
+function showToast(msg, ms) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), ms || 1800);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ============================================================================
+// AUTO-DETECT ИСТОЧНИКА
+// ============================================================================
+function detectSource(text) {
+  if (!text || !text.trim()) return null;
+  const sample = text.slice(0, 5000);
+
+  // Jupyter ipynb: JSON с полями nbformat и cells
+  if (/^\s*\{[\s\S]*"nbformat"[\s\S]*"cells"/.test(sample)) return "jupyter";
+
+  // HTML: явные теги документа
+  if (/<!DOCTYPE\s+html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(sample)) return "html";
+
+  // Obsidian: frontmatter + wiki-ссылки/теги
+  const hasFrontmatter = /^---\s*\n[\s\S]*?\n---\s*\n/.test(text);
+  const hasWiki = /\[\[[^\]]+\]\]/.test(sample);
+  if (hasFrontmatter && hasWiki) return "obsidian";
+  if (hasWiki && /(?:^|\s)#[a-zа-я][\w/-]*/im.test(sample) && !/^#{1,6}\s/m.test(sample.split("\n")[0])) return "obsidian";
+
+  // Notion: 32-hex UUID после слов или в URL
+  const notionUuid = /\s[0-9a-f]{32}\b/gi;
+  const matches = sample.match(notionUuid);
+  if (matches && matches.length >= 2) return "notion";
+  if (/%20[0-9a-f]{32}\.md/i.test(sample)) return "notion";
+
+  // Confluence: типовые остатки макросов
+  if (/\{(?:info|note|warning|code|panel|toc):/i.test(sample)) return "confluence";
+
+  // Google Docs: smart quotes + сноски
+  if (/[\u201C\u201D\u2018\u2019]/.test(sample) && /\[\^?\d+\]/.test(sample)) return "gdocs";
+
+  // Frontmatter без wiki-ссылок — скорее всего, обычный MD из Hugo/Jekyll
+  if (hasFrontmatter) return "plain";
+
+  return "plain";
+}
+
+// ============================================================================
+// НОРМАЛИЗАЦИЯ ПО ИСТОЧНИКУ
+// ============================================================================
+function normalizeBySource(text, source, opts) {
+  let t = text;
+
+  // Universal: невидимые символы, smart quotes (всегда применяются если включены)
+  if (opts.invisible) {
+    // Zero-width пробелы и неразрывные пробелы
+    t = t.replace(/[\u200B-\u200D\uFEFF]/g, "");
+    t = t.replace(/\u00A0/g, " ");
+    // CRLF → LF
+    t = t.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    // Табы в начале строк (но не в коде) — пропускаем, MD сам разберёт
+  }
+
+  if (opts.smartquotes) {
+    t = t.replace(/[\u201C\u201D\u201E\u00AB\u00BB]/g, '"');
+    t = t.replace(/[\u2018\u2019\u201A]/g, "'");
+    t = t.replace(/\u2014/g, "—"); // длинное тире сохраняем
+    t = t.replace(/\u2013/g, "–"); // короткое тоже
+    t = t.replace(/\u2026/g, "..."); // многоточие
+  }
+
+  // === ИСТОЧНИК-СПЕЦИФИЧНЫЕ ПРАВИЛА ===
+
+  if (source === "jupyter") {
+    // Парсим JSON и извлекаем содержимое ячеек
+    try {
+      const nb = JSON.parse(t);
+      if (nb.cells && Array.isArray(nb.cells)) {
+        const out = [];
+        for (const cell of nb.cells) {
+          const src = Array.isArray(cell.source) ? cell.source.join("") : (cell.source || "");
+          if (cell.cell_type === "markdown") {
+            out.push(src);
+          } else if (cell.cell_type === "code") {
+            const lang = (nb.metadata && nb.metadata.kernelspec && nb.metadata.kernelspec.language) || "python";
+            out.push("```" + lang + "\n" + src + "\n```");
+          }
+        }
+        t = out.join("\n\n");
+      }
+    } catch (e) {
+      // не валидный JSON — оставляем как есть
+    }
+  }
+
+  if (source === "html") {
+    t = htmlToMarkdown(t);
+  }
+
+  // Frontmatter: единое правило для Obsidian/Hugo/Jekyll
+  if (opts.frontmatter && /^---\s*\n[\s\S]*?\n---\s*\n/.test(t)) {
+    t = t.replace(/^---\s*\n[\s\S]*?\n---\s*\n/, "");
+  }
+
+  if (source === "obsidian" || opts.wikilinks) {
+    // Сначала удаляем эмбеды ![[file]] — иначе они после image-обработки превратятся в обычные ссылки
+    t = t.replace(/!\[\[[^\]]+\]\]/g, "");
+    // [[Page|Alias]] → [Alias](Page)
+    t = t.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "[$2]($1)");
+    // [[Page]] → [Page](Page)
+    t = t.replace(/\[\[([^\]]+)\]\]/g, "[$1]($1)");
+  }
+
+  if (source === "notion" || opts.uuid) {
+    // UUID 32-hex после пробела
+    t = t.replace(/[ \t]+[0-9a-f]{32}\b/gi, "");
+    // UUID с дефисами
+    t = t.replace(/[ \t]+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "");
+  }
+
+  if (opts.fixLinks) {
+    t = t.replace(/\]\(([^)]+)\)/g, function(m, url) {
+      if (url.startsWith("http") || url.startsWith("#") || url.startsWith("mailto:") || url.startsWith("data:")) return m;
+      let cleaned = url;
+      cleaned = cleaned.replace(/(?:%20|\s)+[0-9a-f]{32}\b/gi, "");
+      cleaned = cleaned.replace(/(?:%20|\s)+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "");
+      cleaned = cleaned.replace(/\.md(#|$)/i, "$1");
+      cleaned = cleaned.replace(/%20/g, " ");
+      return "](" + cleaned + ")";
+    });
+  }
+
+  if (source === "confluence") {
+    // Макросы вида {info}...{info}, {code:lang=py}...{code}
+    t = t.replace(/\{(info|note|warning|tip)(?::[^}]*)?\}([\s\S]*?)\{\1\}/gi, "> $2");
+    t = t.replace(/\{code(?::[^}]*)?\}([\s\S]*?)\{code\}/gi, "```\n$1\n```");
+    t = t.replace(/\{toc[^}]*\}/gi, "");
+    t = t.replace(/\{panel[^}]*\}([\s\S]*?)\{panel\}/gi, "$1");
+  }
+
+  if (opts.html) {
+    // Структурные HTML-теги, оставшиеся после конвертации
+    t = t.replace(/<\/?(?:div|span|figure|figcaption|aside|details|summary|sub|sup|kbd|mark|small|br)[^>]*>/gi, "");
+    t = t.replace(/<[^>]+\s+style="[^"]*"[^>]*>/g, "");
+    t = t.replace(/<!--[\s\S]*?-->/g, "");
+  }
+
+  if (opts.base64) {
+    // Картинки с base64-данными
+    t = t.replace(/!\[[^\]]*\]\(data:image\/[^;]+;base64,[^)]+\)/g, "");
+  }
+
+  if (opts.images) {
+    t = t.replace(/!\[[^\]]*\]\([^)]+\)/g, "");
+  }
+
+  if (opts.empty) {
+    // Пустые таблицы Notion-style
+    t = t.replace(/^\s*\|[\s|:-]*\|\s*$/gm, "");
+    t = t.replace(/[ \t]+$/gm, "");
+    t = t.replace(/^\s*Untitled\s*$/gim, "");
+    t = t.replace(/\n{3,}/g, "\n\n");
+  }
+
+  t = t.replace(/^\s+|\s+$/g, "") + "\n";
+  return t;
+}
+
+// Алиас для обратной совместимости (используется в тестах)
+function cleanupNotionMd(text, opts) {
+  const fullOpts = Object.assign({
+    invisible: true, smartquotes: false, frontmatter: false, wikilinks: false,
+    uuid: false, fixLinks: false, html: false, base64: false, images: false, empty: false
+  }, opts);
+  return normalizeBySource(text, "notion", fullOpts);
+}
+
+// ============================================================================
+// HTML → MARKDOWN (через DOMParser)
+// ============================================================================
+function htmlToMarkdown(html) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+
+  function walk(node) {
+    if (node.nodeType === 3) { // text
+      return node.textContent.replace(/\s+/g, " ");
+    }
+    if (node.nodeType !== 1) return "";
+
+    const tag = node.tagName.toLowerCase();
+    const inner = Array.from(node.childNodes).map(walk).join("");
+
+    switch (tag) {
+      case "h1": return "\n\n# " + inner.trim() + "\n\n";
+      case "h2": return "\n\n## " + inner.trim() + "\n\n";
+      case "h3": return "\n\n### " + inner.trim() + "\n\n";
+      case "h4": return "\n\n#### " + inner.trim() + "\n\n";
+      case "h5": case "h6": return "\n\n##### " + inner.trim() + "\n\n";
+      case "p": return "\n\n" + inner.trim() + "\n\n";
+      case "br": return "\n";
+      case "hr": return "\n\n---\n\n";
+      case "strong": case "b": return "**" + inner + "**";
+      case "em": case "i": return "*" + inner + "*";
+      case "del": case "s": case "strike": return "~~" + inner + "~~";
+      case "code":
+        if (node.parentElement && node.parentElement.tagName.toLowerCase() === "pre") return inner;
+        return "`" + inner + "`";
+      case "pre": {
+        const codeEl = node.querySelector("code");
+        const codeText = codeEl ? codeEl.textContent : node.textContent;
+        const lang = codeEl && codeEl.className.match(/language-(\w+)/);
+        return "\n\n```" + (lang ? lang[1] : "") + "\n" + codeText.trim() + "\n```\n\n";
+      }
+      case "a": {
+        const href = node.getAttribute("href") || "";
+        return "[" + inner.trim() + "](" + href + ")";
+      }
+      case "img": {
+        const src = node.getAttribute("src") || "";
+        const alt = node.getAttribute("alt") || "";
+        return "![" + alt + "](" + src + ")";
+      }
+      case "ul":
+        return "\n\n" + Array.from(node.children).filter(c => c.tagName.toLowerCase() === "li")
+          .map(li => "- " + walk(li).trim()).join("\n") + "\n\n";
+      case "ol":
+        return "\n\n" + Array.from(node.children).filter(c => c.tagName.toLowerCase() === "li")
+          .map((li, i) => (i+1) + ". " + walk(li).trim()).join("\n") + "\n\n";
+      case "li": return inner.trim();
+      case "blockquote":
+        return "\n\n" + inner.trim().split("\n").map(l => "> " + l).join("\n") + "\n\n";
+      case "table": {
+        const rows = Array.from(node.querySelectorAll("tr"));
+        if (!rows.length) return "";
+        const md = [];
+        rows.forEach((row, idx) => {
+          const cells = Array.from(row.children).map(c => walk(c).trim().replace(/\|/g, "\\|"));
+          md.push("| " + cells.join(" | ") + " |");
+          if (idx === 0) md.push("|" + cells.map(() => "---").join("|") + "|");
+        });
+        return "\n\n" + md.join("\n") + "\n\n";
+      }
+      case "th": case "td": return inner.trim();
+      case "tr": case "thead": case "tbody": case "tfoot": return inner;
+      case "script": case "style": case "noscript": case "nav": case "footer": case "header":
+        return ""; // выкидываем
+      default: return inner;
+    }
+  }
+
+  let md = walk(doc.body || doc.documentElement);
+  // Финальная нормализация
+  md = md.replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  return md;
+}
+
+// ============================================================================
+// PLAIN TEXT
+// ============================================================================
+function toPlainText(text, opts) {
+  let t = text;
+
+  if (opts.keepCode) {
+    t = t.replace(/```[\w]*\n?([\s\S]*?)```/g, "$1");
+  } else {
+    t = t.replace(/```[\s\S]*?```/g, "");
+  }
+  t = t.replace(/`([^`]+)`/g, "$1");
+
+  t = t.replace(/!\[[^\]]*\]\([^)]+\)/g, "");
+  t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  t = t.replace(/\*\*([^*]+)\*\*/g, "$1");
+  t = t.replace(/\*([^*]+)\*/g, "$1");
+  t = t.replace(/__([^_]+)__/g, "$1");
+  t = t.replace(/(?<!\w)_([^_]+)_(?!\w)/g, "$1");
+  t = t.replace(/~~([^~]+)~~/g, "$1");
+
+  if (opts.keepHeadings) {
+    t = t.replace(/^#{1,6}\s+/gm, "");
+  } else {
+    t = t.replace(/^#{1,6}\s+(.+)$/gm, "$1");
+  }
+
+  if (!opts.keepLists) {
+    t = t.replace(/^[ \t]*[-*+]\s+/gm, "");
+    t = t.replace(/^[ \t]*\d+\.\s+/gm, "");
+  }
+
+  t = t.replace(/^>\s+/gm, "");
+  t = t.replace(/^[-*_]{3,}$/gm, "");
+  t = t.replace(/^\|(.+)\|$/gm, function(m, inner) {
+    return inner.split("|").map(c => c.trim()).filter(Boolean).join(" — ");
+  });
+  t = t.replace(/^[\s|:-]+$/gm, "");
+  t = t.replace(/\n{3,}/g, "\n\n");
+  return t.trim() + "\n";
+}
+
+// ============================================================================
+// ЧАНКИНГ
+// ============================================================================
+function chunkByHeadings(text, level, maxChars) {
+  const lines = text.split("\n");
+  const chunks = [];
+  const headingRegex = new RegExp("^(#{1," + level + "})\\s+(.+)$");
+  let cur = { title: "", h1: "", h2: "", h3: "", content: [] };
+
+  function push() {
+    const content = cur.content.join("\n").trim();
+    if (content || cur.title) {
+      chunks.push({
+        title: cur.title || "(intro)",
+        path: [cur.h1, cur.h2, cur.h3].filter(Boolean).join(" › "),
+        content
+      });
+    }
+  }
+
+  for (const line of lines) {
+    const m = line.match(headingRegex);
+    if (m) {
+      push();
+      const lvl = m[1].length;
+      const heading = m[2].trim();
+      const next = {
+        title: heading,
+        h1: lvl === 1 ? heading : cur.h1,
+        h2: lvl === 2 ? heading : (lvl < 2 ? "" : cur.h2),
+        h3: lvl === 3 ? heading : (lvl < 3 ? "" : cur.h3),
+        content: [line]
+      };
+      if (lvl === 1) { next.h2 = ""; next.h3 = ""; }
+      if (lvl === 2) { next.h3 = ""; }
+      cur = next;
+    } else {
+      cur.content.push(line);
+    }
+  }
+  push();
+
+  const final = [];
+  for (const ch of chunks) {
+    if (ch.content.length <= maxChars) {
+      final.push(ch);
+    } else {
+      const paras = ch.content.split(/\n\n+/);
+      let buf = "";
+      let part = 1;
+      for (const p of paras) {
+        if (buf && (buf + "\n\n" + p).length > maxChars) {
+          final.push({ title: ch.title + " (part " + part + ")", path: ch.path, content: buf.trim() });
+          buf = p;
+          part++;
+        } else {
+          buf = buf ? buf + "\n\n" + p : p;
+        }
+      }
+      if (buf.trim()) {
+        final.push({
+          title: part > 1 ? ch.title + " (part " + part + ")" : ch.title,
+          path: ch.path,
+          content: buf.trim()
+        });
+      }
+    }
+  }
+  return final;
+}
+
+function chunkByParagraphs(text, maxChars) {
+  const paras = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  const chunks = [];
+  let buf = "";
+  for (const p of paras) {
+    if (buf && (buf + "\n\n" + p).length > maxChars) {
+      chunks.push({ title: "Paragraph chunk", path: "", content: buf.trim() });
+      buf = p;
+    } else {
+      buf = buf ? buf + "\n\n" + p : p;
+    }
+  }
+  if (buf.trim()) chunks.push({ title: "Paragraph chunk", path: "", content: buf.trim() });
+  return chunks;
+}
+
+function chunkSliding(text, maxChars, overlap) {
+  const chunks = [];
+  const stride = Math.max(50, maxChars - overlap);
+  for (let i = 0; i < text.length; i += stride) {
+    const piece = text.slice(i, i + maxChars).trim();
+    if (piece) {
+      chunks.push({ title: "Window " + (chunks.length + 1), path: "offset " + i, content: piece });
+    }
+    if (i + maxChars >= text.length) break;
+  }
+  return chunks;
+}
+
+function chunkRecursive(text, maxChars) {
+  const separators = ["\n\n", "\n", ". ", " "];
+  function split(t, sepIdx) {
+    if (t.length <= maxChars) return [t];
+    if (sepIdx >= separators.length) {
+      const parts = [];
+      for (let i = 0; i < t.length; i += maxChars) parts.push(t.slice(i, i + maxChars));
+      return parts;
+    }
+    const sep = separators[sepIdx];
+    const pieces = t.split(sep);
+    if (pieces.length === 1) return split(t, sepIdx + 1);
+    const result = [];
+    let buf = "";
+    for (const p of pieces) {
+      const candidate = buf ? buf + sep + p : p;
+      if (candidate.length > maxChars) {
+        if (buf) result.push(buf);
+        if (p.length > maxChars) {
+          result.push(...split(p, sepIdx + 1));
+          buf = "";
+        } else {
+          buf = p;
+        }
+      } else {
+        buf = candidate;
+      }
+    }
+    if (buf) result.push(buf);
+    return result;
+  }
+  return split(text, 0).map((c, i) => ({
+    title: "Chunk " + (i + 1),
+    path: "",
+    content: c.trim()
+  })).filter(c => c.content);
+}
+
+function findDuplicates(chunks, threshold) {
+  function shingles(s) {
+    const words = s.toLowerCase().replace(/[^\wа-яё\s]/giu, "").split(/\s+/).filter(Boolean);
+    const sh = new Set();
+    for (let i = 0; i < words.length - 2; i++) {
+      sh.add(words[i] + " " + words[i+1] + " " + words[i+2]);
+    }
+    return sh;
+  }
+  function jaccard(a, b) {
+    if (a.size === 0 || b.size === 0) return 0;
+    let inter = 0;
+    for (const x of a) if (b.has(x)) inter++;
+    return inter / (a.size + b.size - inter);
+  }
+  const sh = chunks.map(c => shingles(c.content));
+  const dups = new Set();
+  for (let i = 0; i < chunks.length; i++) {
+    for (let j = i + 1; j < chunks.length; j++) {
+      if (sh[i].size < 5 || sh[j].size < 5) continue;
+      if (jaccard(sh[i], sh[j]) >= threshold) {
+        dups.add(j);
+      }
+    }
+  }
+  return dups;
+}
+
+function buildChunks(text, opts) {
+  let chunks;
+  if (opts.strategy === "headings") {
+    chunks = chunkByHeadings(text, opts.level, opts.maxChars);
+  } else if (opts.strategy === "paragraphs") {
+    chunks = chunkByParagraphs(text, opts.maxChars);
+  } else if (opts.strategy === "sliding") {
+    chunks = chunkSliding(text, opts.maxChars, opts.overlap);
+  } else if (opts.strategy === "recursive") {
+    chunks = chunkRecursive(text, opts.maxChars);
+  }
+
+  const dups = opts.dedup ? findDuplicates(chunks, 0.8) : new Set();
+
+  return chunks.map((ch, i) => ({
+    id: "chunk_" + String(i + 1).padStart(4, "0"),
+    title: ch.title,
+    path: ch.path,
+    content: ch.content,
+    chars: ch.content.length,
+    tokens_approx: approxTokens(ch.content),
+    is_duplicate: dups.has(i),
+    is_oversized: ch.content.length > opts.maxChars * 1.1
+  }));
+}
+
+function chunksToOutput(chunks, format) {
+  if (format === "langchain") {
+    return JSON.stringify(chunks.map(c => ({
+      page_content: c.content,
+      metadata: {
+        id: c.id,
+        title: c.title,
+        path: c.path,
+        chars: c.chars,
+        tokens_approx: c.tokens_approx,
+        is_duplicate: c.is_duplicate
+      }
+    })), null, 2);
+  }
+  if (format === "csv") {
+    const esc = s => '"' + String(s).replace(/"/g, '""') + '"';
+    const header = "id,title,path,chars,tokens_approx,is_duplicate,content";
+    const rows = chunks.map(c =>
+      [c.id, esc(c.title), esc(c.path), c.chars, c.tokens_approx, c.is_duplicate, esc(c.content)].join(",")
+    );
+    return header + "\n" + rows.join("\n");
+  }
+  return JSON.stringify(chunks, null, 2);
+}
+
+// ============================================================================
+// MARKDOWN PREVIEW
+// ============================================================================
+function renderMarkdown(md) {
+  let html = escapeHtml(md);
+
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(m, lang, code) {
+    return "<pre><code>" + code + "</code></pre>";
+  });
+
+  html = html.replace(/^###### (.+)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^##### (.+)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^#### (.+)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+  html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+
+  html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
+  html = html.replace(/^---+$/gm, "<hr>");
+
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>");
+  html = html.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  const lines = html.split("\n");
+  const out = [];
+  let inUl = false, inOl = false;
+  for (const line of lines) {
+    const ulM = line.match(/^[-*+] (.+)$/);
+    const olM = line.match(/^\d+\. (.+)$/);
+    if (ulM) {
+      if (!inUl) { out.push("<ul>"); inUl = true; }
+      if (inOl) { out.push("</ol>"); inOl = false; }
+      out.push("<li>" + ulM[1] + "</li>");
+    } else if (olM) {
+      if (!inOl) { out.push("<ol>"); inOl = true; }
+      if (inUl) { out.push("</ul>"); inUl = false; }
+      out.push("<li>" + olM[1] + "</li>");
+    } else {
+      if (inUl) { out.push("</ul>"); inUl = false; }
+      if (inOl) { out.push("</ol>"); inOl = false; }
+      out.push(line);
+    }
+  }
+  if (inUl) out.push("</ul>");
+  if (inOl) out.push("</ol>");
+  html = out.join("\n");
+
+  html = html.split(/\n\n+/).map(block => {
+    if (/^<(h[1-6]|ul|ol|pre|blockquote|hr)/.test(block.trim())) return block;
+    if (!block.trim()) return "";
+    return "<p>" + block.replace(/\n/g, "<br>") + "</p>";
+  }).join("\n");
+
+  return html;
+}
+
+// ============================================================================
+// DIFF
+// ============================================================================
+function computeDiff(a, b) {
+  const aLines = a.split("\n");
+  const bLines = b.split("\n");
+  const m = aLines.length, n = bLines.length;
+
+  if (m * n > 1000000) {
+    return [{ type: "info", text: "Файл слишком большой для построчного diff. Показаны итоговые изменения." }]
+      .concat(aLines.length > bLines.length
+        ? [{ type: "del", text: "(удалено " + (aLines.length - bLines.length) + " строк)" }]
+        : [{ type: "add", text: "(итоговая длина: " + bLines.length + " строк)" }]);
+  }
+
+  const dp = Array.from({length: m+1}, () => new Int32Array(n+1));
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      if (aLines[i] === bLines[j]) dp[i][j] = dp[i+1][j+1] + 1;
+      else dp[i][j] = Math.max(dp[i+1][j], dp[i][j+1]);
+    }
+  }
+
+  const result = [];
+  let i = 0, j = 0;
+  while (i < m && j < n) {
+    if (aLines[i] === bLines[j]) { result.push({ type: "context", text: aLines[i] }); i++; j++; }
+    else if (dp[i+1][j] >= dp[i][j+1]) { result.push({ type: "del", text: aLines[i] }); i++; }
+    else { result.push({ type: "add", text: bLines[j] }); j++; }
+  }
+  while (i < m) result.push({ type: "del", text: aLines[i++] });
+  while (j < n) result.push({ type: "add", text: bLines[j++] });
+
+  const compacted = [];
+  let contextBuffer = [];
+  function flushContext(isLast) {
+    if (contextBuffer.length <= 5) compacted.push(...contextBuffer);
+    else {
+      compacted.push(...contextBuffer.slice(0, 2));
+      compacted.push({ type: "info", text: "… " + (contextBuffer.length - 4) + " неизменённых строк …" });
+      if (!isLast) compacted.push(...contextBuffer.slice(-2));
+    }
+    contextBuffer = [];
+  }
+  for (let k = 0; k < result.length; k++) {
+    if (result[k].type === "context") contextBuffer.push(result[k]);
+    else { flushContext(false); compacted.push(result[k]); }
+  }
+  flushContext(true);
+  return compacted;
+}
+
+// ============================================================================
+// ГЛАВНЫЙ ОБРАБОТЧИК
+// ============================================================================
+function process() {
+  const input = $("input").value;
+  updateEmptyState();
+
+  // Auto-detect
+  if (state.source === "auto" && input.trim()) {
+    state.detectedSource = detectSource(input);
+    updateDetectBadge();
+  } else if (!input.trim()) {
+    state.detectedSource = null;
+    updateDetectBadge();
+  }
+  const effectiveSource = state.source === "auto" ? (state.detectedSource || "plain") : state.source;
+
+  if (!input.trim()) {
+    state.lastResult = "";
+    state.lastChunks = null;
+    renderOutput("", null);
+    updateStats("out", "");
+    $("out-extra").textContent = "";
+    return;
+  }
+
+  let result = "";
+  let extra = "";
+  let chunks = null;
+
+  // Опции для нормализации (используются в cleanup и chunks)
+  const normOpts = {
+    invisible: $("opt-invisible").checked,
+    smartquotes: $("opt-smartquotes").checked,
+    frontmatter: $("opt-frontmatter").checked,
+    wikilinks: $("opt-wikilinks").checked,
+    uuid: $("opt-uuid").checked,
+    fixLinks: $("opt-fix-links").checked,
+    html: $("opt-html").checked,
+    base64: $("opt-base64").checked,
+    images: $("opt-images").checked,
+    empty: $("opt-empty").checked
+  };
+
+  if (state.mode === "cleanup") {
+    result = normalizeBySource(input, effectiveSource, normOpts);
+    const removed = input.length - result.length;
+    extra = removed > 0 ? "−" + fmtNum(removed) + " симв." : (removed < 0 ? "+" + fmtNum(-removed) + " симв." : "без изменений");
+  } else if (state.mode === "chunks") {
+    const cleanFirst = $("opt-clean-first").checked;
+    const source = cleanFirst ? normalizeBySource(input, effectiveSource, normOpts) : input;
+    const opts = {
+      strategy: getActiveStrategy(),
+      level: parseInt($("chunk-level").value, 10),
+      maxChars: parseInt($("chunk-max").value, 10),
+      overlap: parseInt($("chunk-overlap").value, 10),
+      dedup: $("opt-dedup").checked
+    };
+    chunks = buildChunks(source, opts);
+    const fmt = $("chunk-format").value;
+    result = chunksToOutput(chunks, fmt);
+    const dupCount = chunks.filter(c => c.is_duplicate).length;
+    const oversized = chunks.filter(c => c.is_oversized).length;
+    const sizes = chunks.map(c => c.chars);
+    const avg = sizes.length ? Math.round(sizes.reduce((a,b)=>a+b,0) / sizes.length) : 0;
+    extra = chunks.length + " чанков · ср. " + fmtNum(avg) + " симв." +
+            (dupCount ? " · " + dupCount + " дубл." : "") +
+            (oversized ? " · " + oversized + " крупных" : "");
+  } else if (state.mode === "plain") {
+    // Plain text сначала нормализует через выбранный источник
+    const normalized = normalizeBySource(input, effectiveSource, normOpts);
+    const opts = {
+      keepHeadings: $("opt-keep-headings").checked,
+      keepLists: $("opt-keep-lists").checked,
+      keepCode: $("opt-keep-code").checked
+    };
+    result = toPlainText(normalized, opts);
+  }
+
+  state.lastResult = result;
+  state.lastChunks = chunks;
+  renderOutput(result, chunks);
+  updateStats("out", result);
+  $("out-extra").textContent = extra;
+}
+
+function getActiveStrategy() {
+  const active = document.querySelector('[data-strategy].active');
+  return active ? active.dataset.strategy : "headings";
+}
+
+function renderOutput(result, chunks) {
+  const raw = $("output-raw");
+  const preview = $("output-preview");
+  const diff = $("output-diff");
+  const chunksList = $("output-chunks");
+
+  raw.style.display = "none";
+  preview.style.display = "none";
+  diff.style.display = "none";
+  chunksList.style.display = "none";
+
+  if (state.mode === "chunks" && state.view === "preview") {
+    chunksList.style.display = "";
+    renderChunksList(chunks);
+    return;
+  }
+
+  if (state.view === "raw") {
+    raw.style.display = "";
+    raw.value = result;
+  } else if (state.view === "preview") {
+    preview.style.display = "";
+    preview.innerHTML = renderMarkdown(result);
+  } else if (state.view === "diff") {
+    diff.style.display = "";
+    renderDiff();
+  }
+}
+
+function renderChunksList(chunks) {
+  const el = $("output-chunks");
+  if (!chunks || chunks.length === 0) {
+    el.innerHTML = '<div class="empty-state"><span class="empty-state-icon">∅</span><span>Нет чанков для показа</span></div>';
+    return;
+  }
+  el.innerHTML = chunks.map(c => {
+    const cls = c.is_duplicate ? "dup" : (c.is_oversized ? "warn" : "");
+    const flags = [];
+    if (c.is_duplicate) flags.push('<span class="chunk-flag flag-dup">дубль</span>');
+    if (c.is_oversized) flags.push('<span class="chunk-flag flag-warn">крупный</span>');
+    const preview = c.content.length > 220 ? c.content.slice(0, 220) + "…" : c.content;
+    return '<div class="chunk-card ' + cls + '">' +
+      '<div class="chunk-head">' +
+        '<span class="chunk-id">' + c.id + '</span>' +
+        '<span class="chunk-title">' + flags.join("") + escapeHtml(c.title) + '</span>' +
+        '<span class="chunk-meta">' + fmtNum(c.chars) + " симв · ~" + fmtNum(c.tokens_approx) + " ток.</span>" +
+      '</div>' +
+      (c.path ? '<div class="chunk-path">' + escapeHtml(c.path) + "</div>" : "") +
+      '<div class="chunk-content collapsed" data-full="' + encodeURIComponent(c.content) + '">' + escapeHtml(preview) + '</div>' +
+      (c.content.length > 220 ? '<span class="chunk-toggle">Развернуть</span>' : "") +
+    '</div>';
+  }).join("");
+
+  el.querySelectorAll(".chunk-toggle").forEach(t => {
+    t.addEventListener("click", function(){
+      const card = this.previousElementSibling;
+      const full = decodeURIComponent(card.getAttribute("data-full"));
+      if (card.classList.contains("expanded")) {
+        card.classList.remove("expanded");
+        card.classList.add("collapsed");
+        card.textContent = full.slice(0, 220) + "…";
+        this.textContent = "Развернуть";
+      } else {
+        card.classList.add("expanded");
+        card.classList.remove("collapsed");
+        card.textContent = full;
+        this.textContent = "Свернуть";
+      }
+    });
+  });
+}
+
+function renderDiff() {
+  const input = $("input").value;
+  const result = state.lastResult;
+  const diffEl = $("output-diff");
+  if (!input || !result) {
+    diffEl.innerHTML = '<div class="empty-state"><span class="empty-state-icon">≡</span><span>Diff появится после обработки</span></div>';
+    return;
+  }
+  const diff = computeDiff(input, result);
+  diffEl.innerHTML = diff.map(d => {
+    if (d.type === "info") return '<div class="diff-info">' + escapeHtml(d.text) + '</div>';
+    if (d.type === "add") return '<div class="diff-line diff-add">+ ' + escapeHtml(d.text) + '</div>';
+    if (d.type === "del") return '<div class="diff-line diff-del">− ' + escapeHtml(d.text) + '</div>';
+    return '<div class="diff-line diff-context">  ' + escapeHtml(d.text) + '</div>';
+  }).join("");
+}
+
+function updateStats(prefix, text) {
+  $(prefix + "-chars").textContent = fmtNum(text.length);
+  $(prefix + "-lines").textContent = fmtNum(countLines(text));
+  $(prefix + "-tokens").textContent = fmtNum(approxTokens(text));
+}
+
+function updateEmptyState() {
+  const isEmpty = !$("input").value.trim();
+  $("empty-overlay").classList.toggle("hidden", !isEmpty);
+  $("hero").style.display = isEmpty ? "" : "none";
+}
+
+function updateDetectBadge() {
+  const badge = $("detect-badge");
+  const nameEl = $("detect-name");
+  if (state.source !== "auto") {
+    badge.classList.add("detected");
+    nameEl.textContent = SOURCES[state.source].name + " (вручную)";
+  } else if (state.detectedSource) {
+    badge.classList.add("detected");
+    nameEl.textContent = SOURCES[state.detectedSource].name;
+  } else {
+    badge.classList.remove("detected");
+    nameEl.textContent = "не определён";
+  }
+}
+
+// ============================================================================
+// УПРАВЛЕНИЕ ВИДИМОСТЬЮ КОНФИГА
+// ============================================================================
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll(".mode-btn").forEach(t => {
+    t.classList.toggle("active", t.dataset.mode === mode);
+  });
+  $("row-cleanup").style.display = (mode === "cleanup" || mode === "chunks" || mode === "plain") ? "" : "none";
+  $("row-chunks").style.display = mode === "chunks" ? "" : "none";
+  $("row-chunks-2").style.display = mode === "chunks" ? "" : "none";
+  $("row-plain").style.display = mode === "plain" ? "" : "none";
+
+  // В chunks режиме переименуем "Превью" в "Карточки"
+  const previewBtn = document.querySelector('[data-view="preview"]');
+  previewBtn.textContent = mode === "chunks" ? "Карточки" : "Превью";
+
+  process();
+}
+
+function setView(view) {
+  state.view = view;
+  document.querySelectorAll(".view-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.view === view);
+  });
+  renderOutput(state.lastResult, state.lastChunks);
+}
+
+function updateChunkControlsVisibility() {
+  const strategy = getActiveStrategy();
+  $("ctrl-headings").style.display = strategy === "headings" ? "inline-flex" : "none";
+  $("ctrl-overlap").style.display = strategy === "sliding" ? "inline-flex" : "none";
+}
+
+// ============================================================================
+// ФАЙЛЫ
+// ============================================================================
+async function handleFiles(fileList) {
+  state.loadedFiles = [];
+  for (const file of fileList) {
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith(".zip")) {
+      showToast("ZIP пока не поддерживается. Распакуйте и перетащите содержимое.", 3500);
+      return;
+    } else if (/\.(md|markdown|txt|html|htm|ipynb)$/i.test(file.name)) {
+      const content = await file.text();
+      state.loadedFiles.push({name: file.name, content});
+    }
+  }
+
+  if (state.loadedFiles.length === 0) {
+    showToast("Не найдено поддерживаемых файлов (.md .txt .html .ipynb)");
+    return;
+  }
+
+  let combined;
+  if (state.loadedFiles.length === 1) {
+    combined = state.loadedFiles[0].content;
+  } else {
+    combined = state.loadedFiles.map(f =>
+      "<!-- FILE: " + f.name + " -->\n\n" + f.content
+    ).join("\n\n---\n\n");
+  }
+
+  $("input").value = combined;
+  showFilesList();
+  updateStats("in", combined);
+  process();
+}
+
+function showFilesList() {
+  const list = $("files-list");
+  if (state.loadedFiles.length === 0) {
+    list.style.display = "none";
+    return;
+  }
+  list.style.display = "";
+  list.innerHTML =
+    '<div class="files-list-head"><span>Загружено файлов: ' + state.loadedFiles.length + '</span><span class="files-list-clear">Убрать</span></div>' +
+    state.loadedFiles.map(f =>
+      '<div class="file-row"><span>' + escapeHtml(f.name) + '</span><span>' + fmtNum(f.content.length) + ' симв.</span></div>'
+    ).join("");
+  list.querySelector(".files-list-clear").addEventListener("click", () => {
+    state.loadedFiles = [];
+    showFilesList();
+  });
+}
+
+// ============================================================================
+// SOURCE PICKER
+// ============================================================================
+function renderSourceList() {
+  const list = $("source-list");
+  list.innerHTML = Object.entries(SOURCES).map(([key, info]) =>
+    '<div class="source-item ' + (state.source === key ? "active" : "") + '" data-source="' + key + '">' +
+      '<div class="source-name">' + info.name + '</div>' +
+      '<div class="source-desc">' + info.desc + '</div>' +
+    '</div>'
+  ).join("");
+  list.querySelectorAll(".source-item").forEach(el => {
+    el.addEventListener("click", () => {
+      state.source = el.dataset.source;
+      $("source-modal").classList.remove("show");
+      updateDetectBadge();
+      saveSettings();
+      process();
+    });
+  });
+}
+
+// ============================================================================
+// ПРЕСЕТЫ
+// ============================================================================
+const PRESETS = {
+  custom: null,
+  relevance: { mode: "chunks", strategy: "headings", settings: { "chunk-level": "2", "chunk-max": "1500", "chunk-format": "generic", "opt-clean-first": true, "opt-dedup": true }},
+  langchain: { mode: "chunks", strategy: "recursive", settings: { "chunk-max": "1000", "chunk-overlap": "200", "chunk-format": "langchain", "opt-clean-first": true, "opt-dedup": false }},
+  generic: { mode: "chunks", strategy: "sliding", settings: { "chunk-max": "800", "chunk-overlap": "100", "chunk-format": "generic", "opt-clean-first": true, "opt-dedup": true }}
+};
+
+function applyPreset(name) {
+  document.querySelectorAll('[data-preset]').forEach(b => {
+    b.classList.toggle("active", b.dataset.preset === name);
+  });
+  const p = PRESETS[name];
+  if (!p) return;
+  setMode(p.mode);
+  if (p.strategy) {
+    document.querySelectorAll('[data-strategy]').forEach(b => {
+      b.classList.toggle("active", b.dataset.strategy === p.strategy);
+    });
+  }
+  for (const [key, val] of Object.entries(p.settings)) {
+    const el = $(key);
+    if (!el) continue;
+    if (el.type === "checkbox") el.checked = val;
+    else el.value = val;
+  }
+  updateChunkControlsVisibility();
+  process();
+}
+
+// ============================================================================
+// СОХРАНЕНИЕ НАСТРОЕК
+// ============================================================================
+function saveSettings() {
+  const settings = { mode: state.mode, source: state.source, options: {} };
+  document.querySelectorAll("input[type=checkbox], input[type=number], select").forEach(el => {
+    if (el.id) settings.options[el.id] = el.type === "checkbox" ? el.checked : el.value;
+  });
+  const activeStrategy = document.querySelector('[data-strategy].active');
+  if (activeStrategy) settings.strategy = activeStrategy.dataset.strategy;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch (e) {}
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const settings = JSON.parse(raw);
+    if (settings.mode) setMode(settings.mode);
+    if (settings.source) state.source = settings.source;
+    if (settings.options) {
+      for (const [key, val] of Object.entries(settings.options)) {
+        const el = $(key);
+        if (!el) continue;
+        if (el.type === "checkbox") el.checked = val;
+        else el.value = val;
+      }
+    }
+    if (settings.strategy) {
+      document.querySelectorAll('[data-strategy]').forEach(b => {
+        b.classList.toggle("active", b.dataset.strategy === settings.strategy);
+      });
+    }
+    updateChunkControlsVisibility();
+    updateDetectBadge();
+  } catch (e) {}
+}
+
+// ============================================================================
+// SHARE LINK
+// ============================================================================
+function buildShareLink() {
+  const params = new URLSearchParams();
+  params.set("mode", state.mode);
+  params.set("source", state.source);
+  const activeStrategy = document.querySelector('[data-strategy].active');
+  if (activeStrategy) params.set("strategy", activeStrategy.dataset.strategy);
+  document.querySelectorAll("input[type=checkbox], input[type=number], select").forEach(el => {
+    if (el.id) {
+      const v = el.type === "checkbox" ? (el.checked ? "1" : "0") : el.value;
+      params.set(el.id, v);
+    }
+  });
+  return location.origin + location.pathname + "?" + params.toString();
+}
+
+function applyShareLink() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has("mode")) return;
+  const mode = params.get("mode");
+  if (["cleanup", "chunks", "plain"].includes(mode)) setMode(mode);
+  if (params.has("source") && SOURCES[params.get("source")]) state.source = params.get("source");
+  if (params.has("strategy")) {
+    const strat = params.get("strategy");
+    document.querySelectorAll('[data-strategy]').forEach(b => {
+      b.classList.toggle("active", b.dataset.strategy === strat);
+    });
+  }
+  document.querySelectorAll("input[type=checkbox], input[type=number], select").forEach(el => {
+    if (el.id && params.has(el.id)) {
+      const v = params.get(el.id);
+      if (el.type === "checkbox") el.checked = v === "1";
+      else el.value = v;
+    }
+  });
+  updateChunkControlsVisibility();
+  updateDetectBadge();
+}
+
+// ============================================================================
+// SAMPLES
+// ============================================================================
+const SAMPLES = {
+  notion: `# Учебный план abc123def456789012345678901234ab
+
+<aside>Это страница из Notion-экспорта</aside>
+
+## Введение abc123def456789012345678901234ab
+
+Курс по [аналитике данных](Analytics%20abc123def456789012345678901234ab.md) на 12 недель.
+
+<div style="color: red;">Важная информация</div>
+
+### Цели курса
+
+- Освоить SQL
+- Научиться работать с Power BI
+- Построить первый дашборд
+
+## Программа abc123def456789012345678901234ab
+
+| | |
+|--|--|
+
+Untitled
+
+### Неделя 1
+
+Знакомство с инструментами и [командой](Team%20abc123def456789012345678901234ab.md).
+
+\`\`\`python
+print("hello")
+\`\`\`
+`,
+  obsidian: `---
+title: Заметка по RAG
+tags: [ai, ml, rag]
+created: 2026-04-15
+---
+
+# Заметка по RAG
+
+Сегодня изучал [[Vector databases]] и сравнивал с [[Keyword search|обычным поиском]].
+
+## Ключевые мысли #ml #rag
+
+- Эмбеддинги работают лучше для семантически близких запросов
+- Гибридный поиск даёт ещё лучшие результаты
+- См. также: [[Hybrid search]]
+
+![[architecture-diagram.png]]
+
+## TODO
+
+- [ ] Прочитать paper про reranking
+- [ ] Попробовать [[Cohere]] embeddings
+`,
+  html: `<!DOCTYPE html>
+<html>
+<head><title>Statia</title></head>
+<body>
+<h1>Что такое RAG</h1>
+<p>RAG (Retrieval-Augmented Generation) — это подход, при котором LLM получает <strong>дополнительный контекст</strong> из внешней базы знаний.</p>
+<h2>Основные компоненты</h2>
+<ul>
+<li>Векторная БД</li>
+<li>Embedding-модель</li>
+<li>LLM для генерации</li>
+</ul>
+<p>Подробнее в <a href="https://example.com/article">статье</a>.</p>
+<pre><code class="language-python">
+docs = retriever.search(query)
+answer = llm.generate(docs + query)
+</code></pre>
+</body>
+</html>`,
+  jupyter: `{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "source": ["# Анализ продаж\\n\\nЗагрузим данные."]
+  },
+  {
+   "cell_type": "code",
+   "source": ["import pandas as pd\\ndf = pd.read_csv('sales.csv')\\ndf.head()"]
+  },
+  {
+   "cell_type": "markdown",
+   "source": ["## Очистка данных\\n\\nУдалим дубликаты."]
+  },
+  {
+   "cell_type": "code",
+   "source": ["df = df.drop_duplicates()\\nprint(len(df))"]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {"language": "python"}
+ },
+ "nbformat": 4
+}`,
+  confluence: `# Регламент работы
+
+{info}Этот документ обязателен для прочтения.{info}
+
+## Процесс согласования
+
+{code:lang=bash}
+git checkout -b feature/x
+git push origin feature/x
+{code}
+
+{toc:maxLevel=3}
+
+## Контакты
+
+{panel:title=Команда}
+- Иван — лид
+- Мария — аналитик
+{panel}
+`
+};
+
+function loadSample() {
+  // Пытаемся загрузить пример соответствующий выбранному источнику или Notion по умолчанию
+  let key = state.source !== "auto" && SAMPLES[state.source] ? state.source : "notion";
+  $("input").value = SAMPLES[key];
+  updateStats("in", SAMPLES[key]);
+  process();
+  showToast("Загружен пример: " + SOURCES[key].name);
+}
+
+// ============================================================================
+// ТЕСТЫ
+// ============================================================================
+const TESTS = [
+  {
+    name: "Notion: удаление UUID без дефисов",
+    fn: () => {
+      const r = normalizeBySource("# Page abc123def456789012345678901234ab\n", "notion", {uuid:true});
+      return r.trim() === "# Page";
+    }
+  },
+  {
+    name: "Notion: удаление UUID с дефисами",
+    fn: () => {
+      const r = normalizeBySource("## Section abc12345-1234-1234-1234-123456789abc\n", "notion", {uuid:true});
+      return r.trim() === "## Section";
+    }
+  },
+  {
+    name: "Notion: чистка ссылок с UUID",
+    fn: () => {
+      const r = normalizeBySource("[Link](Page%20Name%20abc123def456789012345678901234ab.md)\n", "notion", {fixLinks:true});
+      return r.includes("[Link](Page Name)");
+    }
+  },
+  {
+    name: "Сохранение HTTP-ссылок",
+    fn: () => {
+      const r = normalizeBySource("[Google](https://google.com)\n", "notion", {fixLinks:true});
+      return r.includes("[Google](https://google.com)");
+    }
+  },
+  {
+    name: "Obsidian: wiki-ссылки",
+    fn: () => {
+      const r = normalizeBySource("См. [[Vector DB]] и [[Search|поиск]].\n", "obsidian", {wikilinks:true});
+      return r.includes("[Vector DB](Vector DB)") && r.includes("[поиск](Search)");
+    }
+  },
+  {
+    name: "Obsidian: удаление эмбедов",
+    fn: () => {
+      const r = normalizeBySource("Text\n![[image.png]]\nMore\n", "obsidian", {wikilinks:true});
+      return !r.includes("![[");
+    }
+  },
+  {
+    name: "Frontmatter удаление",
+    fn: () => {
+      const r = normalizeBySource("---\ntitle: Test\n---\n# Hello\n", "obsidian", {frontmatter:true});
+      return !r.includes("title:") && r.includes("# Hello");
+    }
+  },
+  {
+    name: "Smart quotes нормализация",
+    fn: () => {
+      const r = normalizeBySource("\u201cHello\u201d and \u2018world\u2019\n", "plain", {smartquotes:true});
+      return r.includes('"Hello"') && r.includes("'world'");
+    }
+  },
+  {
+    name: "Невидимые символы удаление",
+    fn: () => {
+      const r = normalizeBySource("Hello\u200Bworld\u00A0test\n", "plain", {invisible:true});
+      return r.includes("Helloworld") && !r.includes("\u200B");
+    }
+  },
+  {
+    name: "Confluence: макросы",
+    fn: () => {
+      const r = normalizeBySource("{info}Important{info}\n", "confluence", {});
+      return r.includes("> Important");
+    }
+  },
+  {
+    name: "Confluence: code блоки",
+    fn: () => {
+      const r = normalizeBySource("{code:lang=py}print(1){code}\n", "confluence", {});
+      return r.includes("```") && r.includes("print(1)");
+    }
+  },
+  {
+    name: "Удаление HTML обёрток",
+    fn: () => {
+      const r = normalizeBySource("<aside>text</aside><div>another</div>\n", "notion", {html:true});
+      return !r.includes("<aside>") && r.includes("text") && r.includes("another");
+    }
+  },
+  {
+    name: "Auto-detect: Notion",
+    fn: () => detectSource("# Page abc123def456789012345678901234ab\n[Link](X%20abc123def456789012345678901234ab.md)") === "notion"
+  },
+  {
+    name: "Auto-detect: Obsidian",
+    fn: () => detectSource("---\ntitle: x\n---\nSee [[Page]].") === "obsidian"
+  },
+  {
+    name: "Auto-detect: Jupyter",
+    fn: () => detectSource('{"nbformat":4,"cells":[]}') === "jupyter"
+  },
+  {
+    name: "Auto-detect: HTML",
+    fn: () => detectSource("<!DOCTYPE html><html><body><p>x</p></body></html>") === "html"
+  },
+  {
+    name: "Plain text сохранение заголовка",
+    fn: () => {
+      const r = toPlainText("# Title\nbody\n", {keepHeadings:true, keepLists:false, keepCode:true});
+      return r.includes("Title") && !r.includes("#");
+    }
+  },
+  {
+    name: "Чанкинг по заголовкам",
+    fn: () => {
+      const r = buildChunks("# A\ntext A\n# B\ntext B\n", {strategy:"headings", level:1, maxChars:1000, dedup:false});
+      return r.length === 2 && r[0].title === "A" && r[1].title === "B";
+    }
+  },
+  {
+    name: "Рекурсивный чанкинг",
+    fn: () => {
+      const r = buildChunks("para1\n\npara2\n\npara3\n\npara4\n", {strategy:"recursive", maxChars:15, dedup:false});
+      return r.length >= 2;
+    }
+  },
+  {
+    name: "Дедупликация",
+    fn: () => {
+      const r = buildChunks("# A\nThe quick brown fox jumps over the lazy dog yesterday morning.\n# B\nThe quick brown fox jumps over the lazy dog yesterday morning.\n",
+                            {strategy:"headings", level:1, maxChars:1000, dedup:true});
+      return r.some(c => c.is_duplicate);
+    }
+  },
+  {
+    name: "LangChain формат",
+    fn: () => {
+      const ch = buildChunks("# Title\ncontent\n", {strategy:"headings", level:1, maxChars:1000, dedup:false});
+      return chunksToOutput(ch, "langchain").includes("page_content");
+    }
+  },
+  {
+    name: "CSV формат с экранированием",
+    fn: () => {
+      const ch = buildChunks("# Title\ncontent with, comma\n", {strategy:"headings", level:1, maxChars:1000, dedup:false});
+      const r = chunksToOutput(ch, "csv");
+      return r.startsWith("id,title,path") && /"[^"]*content with, comma[^"]*"/.test(r);
+    }
+  }
+];
+
+function runTests() {
+  const body = $("tests-body");
+  let passed = 0;
+  const rows = TESTS.map(test => {
+    let ok = false, err = "";
+    try { ok = test.fn(); } catch (e) { err = e.message; }
+    if (ok) passed++;
+    return '<div class="test-row">' +
+      '<span>' + escapeHtml(test.name) + '</span>' +
+      '<span class="' + (ok ? "test-pass" : "test-fail") + '">' +
+        (ok ? "✓ pass" : "✗ fail" + (err ? " (" + escapeHtml(err) + ")" : "")) +
+      '</span>' + '</div>';
+  });
+  const allPass = passed === TESTS.length;
+  body.innerHTML =
+    '<div class="test-summary ' + (allPass ? "all-pass" : "has-fail") + '">' +
+      passed + " / " + TESTS.length + " тестов прошли" + '</div>' + rows.join("");
+  $("tests-modal").classList.add("show");
+}
+
+// ============================================================================
+// EVENT LISTENERS
+// ============================================================================
+document.querySelectorAll(".mode-btn").forEach(t => {
+  t.addEventListener("click", () => {
+    setMode(t.dataset.mode);
+    document.querySelector('[data-preset="custom"]').classList.add("active");
+    document.querySelectorAll('[data-preset]:not([data-preset="custom"])').forEach(b => b.classList.remove("active"));
+    saveSettings();
+  });
+});
+
+document.querySelectorAll(".view-btn").forEach(b => {
+  b.addEventListener("click", () => setView(b.dataset.view));
+});
+
+document.querySelectorAll('[data-strategy]').forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll('[data-strategy]').forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    updateChunkControlsVisibility();
+    saveSettings();
+    process();
+  });
+});
+
+document.querySelectorAll('[data-preset]').forEach(b => {
+  b.addEventListener("click", () => applyPreset(b.dataset.preset));
+});
+
+// Drag-and-drop на textarea
+const inputArea = $("input");
+function setupDropzone(el) {
+  el.addEventListener("dragover", e => { e.preventDefault(); el.classList.add("dropping"); });
+  el.addEventListener("dragleave", () => el.classList.remove("dropping"));
+  el.addEventListener("drop", async e => {
+    e.preventDefault();
+    el.classList.remove("dropping");
+    if (e.dataTransfer.files.length) await handleFiles(e.dataTransfer.files);
+  });
+}
+setupDropzone(inputArea);
+setupDropzone($("empty-overlay"));
+
+inputArea.addEventListener("input", () => {
+  updateStats("in", inputArea.value);
+  process();
+});
+
+$("clear-input").addEventListener("click", () => {
+  inputArea.value = "";
+  state.loadedFiles = [];
+  showFilesList();
+  updateStats("in", "");
+  process();
+});
+
+$("sample-btn").addEventListener("click", loadSample);
+$("hint-sample").addEventListener("click", e => { e.preventDefault(); loadSample(); });
+
+$("copy-btn").addEventListener("click", async () => {
+  if (!state.lastResult) return;
+  try {
+    await navigator.clipboard.writeText(state.lastResult);
+    const btn = $("copy-btn");
+    const orig = btn.textContent;
+    btn.textContent = "✓ Скопировано";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove("copied"); }, 1500);
+  } catch (e) { showToast("Не удалось скопировать"); }
+});
+
+$("download-btn").addEventListener("click", () => {
+  if (!state.lastResult) { showToast("Сначала введите текст"); return; }
+  let ext = "md", mime = "text/markdown";
+  if (state.mode === "chunks") {
+    const fmt = $("chunk-format").value;
+    if (fmt === "csv") { ext = "csv"; mime = "text/csv"; }
+    else { ext = "json"; mime = "application/json"; }
+  }
+  if (state.mode === "plain") { ext = "txt"; mime = "text/plain"; }
+  const blob = new Blob([state.lastResult], {type: mime + ";charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
+  a.download = "converted-" + ts + "." + ext;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+$("share-link-btn").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(buildShareLink());
+    showToast("Ссылка с настройками скопирована");
+  } catch (e) { showToast("Не удалось скопировать"); }
+});
+
+$("run-tests-btn").addEventListener("click", runTests);
+$("help-btn").addEventListener("click", () => $("help-modal").classList.add("show"));
+
+$("detect-badge").addEventListener("click", () => {
+  renderSourceList();
+  $("source-modal").classList.add("show");
+});
+
+$("config-toggle").addEventListener("click", () => {
+  const content = $("config-content");
+  const btn = $("config-toggle");
+  content.classList.toggle("open");
+  btn.classList.toggle("open");
+});
+
+document.querySelectorAll("[data-close]").forEach(b => {
+  b.addEventListener("click", () => $(b.dataset.close).classList.remove("show"));
+});
+document.querySelectorAll(".modal-overlay").forEach(m => {
+  m.addEventListener("click", e => { if (e.target === m) m.classList.remove("show"); });
+});
+
+document.querySelectorAll("input[type=checkbox], input[type=number], select").forEach(el => {
+  el.addEventListener("change", () => { saveSettings(); process(); });
+});
+
+document.addEventListener("keydown", e => {
+  const isMod = e.ctrlKey || e.metaKey;
+  if (!isMod) return;
+  if (e.key === "Enter") { e.preventDefault(); process(); showToast("Обработано"); }
+  else if (e.key === "s") { e.preventDefault(); $("download-btn").click(); }
+  else if (e.shiftKey && /^[CсС]$/.test(e.key)) { e.preventDefault(); $("copy-btn").click(); }
+});
+
+// ============================================================================
+// ИНИЦИАЛИЗАЦИЯ
+// ============================================================================
+applyShareLink();
+loadSettings();
+updateChunkControlsVisibility();
+updateDetectBadge();
+updateEmptyState();
+process();
+
+})();
+</script>
+</body>
+</html>
